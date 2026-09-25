@@ -197,7 +197,7 @@
       color: #2ECC71;
       border: 1px dashed #2ECC71;
       font-family: monospace;
-      font-size: 16px;
+      font-size: 15px;
       font-weight: bold;
       padding: 12px;
       border-radius: 8px;
@@ -205,6 +205,13 @@
       max-width: 320px;
       margin: 12px 0;
       word-break: break-all;
+      line-height: 1.4;
+    }
+    .notice-badge {
+      font-size: 11px;
+      color: #FFA502;
+      margin-top: -10px;
+      margin-bottom: 12px;
     }
   </style>
 </head>
@@ -227,7 +234,8 @@
 
 <div id="start-overlay" class="overlay">
   <h1>🪖 부캠 뚝배기 깨기</h1>
-  <p>제한시간 30초 동안 나타나는 적의 뚝배기를 깨부수세요!</p>
+  <p id="start-desc">제한시간 30초 동안 나타나는 적의 뚝배기를 깨부수세요!</p>
+  <div id="start-badge" class="notice-badge"></div>
   <div class="rule-box">
     <div>🪖 <b>3뚝 적군</b> : +10점 (헤드샷 타격)</div>
     <div>🍗 <b>황금 치킨</b> : +30점 (보너스 타겟)</div>
@@ -237,11 +245,11 @@
 </div>
 
 <div id="end-overlay" class="overlay hidden">
-  <h1>작전 종료!</h1>
+  <h1 id="end-title">작전 종료!</h1>
   <p id="final-stats">집계 중...</p>
   <div id="code-box" class="code-display">코드 생성 중...</div>
   <button class="btn btn-copy" id="copy-btn">📋 보상 코드 복사하기</button>
-  <button class="btn" style="background:#57606F; color:#FFF; margin-top: 10px;" onclick="location.reload()">다시 하기</button>
+  <button class="btn" id="retry-btn" style="background:#57606F; color:#FFF; margin-top: 10px;">다시 하기</button>
 </div>
 
 <script>
@@ -280,6 +288,26 @@
     }
   }
 
+  // 한국 시간(KST) 기준 YYYY-MM-DD 문자열 생성
+  function getKstDateString() {
+    const now = new Date();
+    const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+    const kst = new Date(utc + (9 * 3600000));
+    const y = kst.getFullYear();
+    const m = String(kst.getMonth() + 1).padStart(2, '0');
+    const d = String(kst.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const userId = urlParams.get('uid') || "GUEST";
+  const todayKst = getKstDateString();
+  const rewardStorageKey = `oops_reward_claimed_${userId}`;
+
+  function hasClaimedToday() {
+    return localStorage.getItem(rewardStorageKey) === todayKst;
+  }
+
   const grid = document.getElementById('grid');
   const holes = [];
   for (let i = 0; i < 9; i++) {
@@ -300,15 +328,25 @@
   const timeDisplay = document.getElementById('time-display');
   const scoreDisplay = document.getElementById('score-display');
   const startOverlay = document.getElementById('start-overlay');
+  const startBadge = document.getElementById('start-badge');
   const endOverlay = document.getElementById('end-overlay');
   const finalStats = document.getElementById('final-stats');
   const codeBox = document.getElementById('code-box');
   const copyBtn = document.getElementById('copy-btn');
+  const retryBtn = document.getElementById('retry-btn');
 
-  const urlParams = new URLSearchParams(window.location.search);
-  const userId = urlParams.get('uid') || "12345678";
+  // 시작 화면 안내 문구 세팅
+  if (hasClaimedToday()) {
+    startBadge.innerText = "ℹ️ 오늘 일일 보상을 이미 수령하여 연습 모드로 진행됩니다.";
+  } else {
+    startBadge.innerText = "🪙 200점 이상 달성 시 오늘의 1회 코인 보상 코드 지급!";
+  }
 
   document.getElementById('start-btn').addEventListener('click', startGame);
+  retryBtn.addEventListener('click', () => {
+    endOverlay.classList.add('hidden');
+    startGame();
+  });
 
   function startGame() {
     startOverlay.classList.add('hidden');
@@ -398,8 +436,33 @@
     clearTimeout(spawnTimer);
     holes.forEach(h => h.innerHTML = '');
 
-    finalStats.innerHTML = `최종 득점: <b>${score}점</b><br>수송기 보급 본부와 통신 중...`;
     endOverlay.classList.remove('hidden');
+
+    // 1. 이미 오늘 보상 코드를 발급받은 경우 (연습 모드)
+    if (hasClaimedToday()) {
+      finalStats.innerHTML = `최종 득점: <b>${score}점</b><br>🎮 [연습 모드 완료]`;
+      codeBox.style.color = "#A4B0BE";
+      codeBox.style.borderColor = "#2F3640";
+      codeBox.innerHTML = `오늘 보상 수령 완료<br><span style="font-size:12px;color:#747D8C;">내일 자정(00시) 이후 다시 보상 코드를 획득할 수 있습니다.</span>`;
+      copyBtn.style.display = "none";
+      return;
+    }
+
+    // 2. 게스트(uid 없음) 체크
+    if (userId === "GUEST") {
+      finalStats.innerHTML = `최종 득점: <b>${score}점</b>`;
+      codeBox.style.color = "#E74C3C";
+      codeBox.style.borderColor = "#E74C3C";
+      codeBox.innerHTML = `디스코드 전용 링크 필요<br><span style="font-size:12px;color:#CED6E0;">디스코드 채널에서 !미니게임 명령어를 입력해 주세요.</span>`;
+      copyBtn.style.display = "none";
+      return;
+    }
+
+    // 3. 오늘 첫 판: 서버와 통신하여 보상 코드 발급
+    finalStats.innerHTML = `최종 득점: <b>${score}점</b><br>수송기 보급 본부와 통신 중...`;
+    codeBox.style.color = "#2ECC71";
+    codeBox.style.borderColor = "#2ECC71";
+    codeBox.innerText = "보상 코드 생성 중...";
 
     try {
       const response = await fetch('/api/get-code', {
@@ -412,16 +475,28 @@
         })
       });
 
-      if (!response.ok) throw new Error('API 응답 실패');
       const data = await response.json();
-      generatedCode = data.code;
-      codeBox.innerText = generatedCode;
-      finalStats.innerHTML = `최종 득점: <b>${score}점</b> (보상: 🪙 ${data.coins}코인)`;
+
+      if (data.success && data.coins > 0) {
+        // 성공적으로 보상 코드 획득 -> 오늘 날짜 기록 (이후 연속 플레이는 연습 모드로 전환)
+        localStorage.setItem(rewardStorageKey, todayKst);
+        generatedCode = data.code;
+        codeBox.innerText = generatedCode;
+        finalStats.innerHTML = `최종 득점: <b>${score}점</b> (보상: 🪙 <b>+${data.coins}코인</b>)`;
+        copyBtn.style.display = "block";
+      } else {
+        // 점수 미달(200점 미만) -> 당일 기록 안 함 (재도전 가능)
+        generatedCode = "";
+        codeBox.style.color = "#FFA502";
+        codeBox.style.borderColor = "#FFA502";
+        codeBox.innerHTML = `보상 기준 미달 (200점 필요)<br><span style="font-size:12px;color:#CED6E0;">코인이 지급되지 않았습니다. 다시 도전해 보세요!</span>`;
+        finalStats.innerHTML = `최종 득점: <b>${score}점</b> (최소 200점 필요)`;
+        copyBtn.style.display = "none";
+      }
     } catch (err) {
-      const mockTimestamp = Math.floor(Date.now() / 1000);
-      generatedCode = `OOPS-10-${mockTimestamp}-TESTCODE`;
-      codeBox.innerText = generatedCode;
-      finalStats.innerHTML = `최종 득점: <b>${score}점</b> (로컬 테스트 모드)`;
+      finalStats.innerHTML = `최종 득점: <b>${score}점</b> (통신 오류)`;
+      codeBox.innerText = "서버 연결에 실패했습니다. 다시 시도해 주세요.";
+      copyBtn.style.display = "none";
     }
   }
 
