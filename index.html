@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>OOPS 부캠 뚝배기 깨기</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background-color: #121417;
+      color: #F1F2F6;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+      touch-action: manipulation;
+      overscroll-behavior: none;
+    }
+    #game-container {
+      width: 100%;
+      max-width: 420px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .status-bar {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #1E232A;
+      border: 1px solid #2F3640;
+      border-radius: 12px;
+      padding: 12px 18px;
+      margin-bottom: 16px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    }
+    .status-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .status-label {
+      font-size: 11px;
+      color: #A4B0BE;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+    .status-val {
+      font-size: 20px;
+      font-weight: 800;
+      color: #FFA502;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      background: #191E24;
+      border-radius: 16px;
+      padding: 12px;
+      border: 2px solid #2F3640;
+    }
+    .hole {
+      background: #101216;
+      border-radius: 12px;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 2px solid #23272F;
+      box-shadow: inset 0 6px 12px rgba(0,0,0,0.6);
+    }
+    .target {
+      position: absolute;
+      width: 80%;
+      height: 80%;
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      transform: translateY(110%);
+      transition: transform 0.12s ease-out;
+      cursor: pointer;
+    }
+    .target.active {
+      transform: translateY(0%);
+    }
+    .target.hit {
+      transform: scale(0.85);
+      opacity: 0.3;
+      pointer-events: none;
+    }
+    .target-enemy {
+      background: #2F3542;
+      border: 2px solid #E74C3C;
+      color: #FFF;
+    }
+    .target-bonus {
+      background: #705800;
+      border: 2px solid #F1C40F;
+      box-shadow: 0 0 15px rgba(241, 196, 15, 0.5);
+    }
+    .target-friendly {
+      background: #1B4D3E;
+      border: 2px solid #2ECC71;
+    }
+    .target-icon {
+      font-size: 34px;
+      line-height: 1;
+    }
+    .target-text {
+      font-size: 11px;
+      font-weight: 700;
+      margin-top: 2px;
+    }
+    .overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(10, 12, 15, 0.92);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      z-index: 100;
+      text-align: center;
+    }
+    .overlay.hidden {
+      display: none;
+    }
+    .overlay h1 {
+      font-size: 24px;
+      color: #FFA502;
+      margin-bottom: 8px;
+    }
+    .overlay p {
+      font-size: 13px;
+      color: #CED6E0;
+      margin-bottom: 20px;
+      line-height: 1.5;
+    }
+    .rule-box {
+      background: #1E232A;
+      border: 1px solid #2F3640;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 20px;
+      text-align: left;
+      font-size: 12px;
+      width: 100%;
+      max-width: 320px;
+    }
+    .rule-box div {
+      margin-bottom: 6px;
+    }
+    .btn {
+      width: 100%;
+      max-width: 320px;
+      padding: 14px;
+      border-radius: 10px;
+      background: #FFA502;
+      color: #121417;
+      font-size: 16px;
+      font-weight: 800;
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(255, 165, 2, 0.4);
+    }
+    .btn:active {
+      transform: scale(0.98);
+    }
+    .btn-copy {
+      background: #2ECC71;
+      color: white;
+      margin-top: 10px;
+      box-shadow: 0 4px 12px rgba(46, 204, 113, 0.4);
+    }
+    .code-display {
+      background: #000;
+      color: #2ECC71;
+      border: 1px dashed #2ECC71;
+      font-family: monospace;
+      font-size: 16px;
+      font-weight: bold;
+      padding: 12px;
+      border-radius: 8px;
+      width: 100%;
+      max-width: 320px;
+      margin: 12px 0;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+
+<div id="game-container">
+  <div class="status-bar">
+    <div class="status-item">
+      <span class="status-label">남은 시간</span>
+      <span id="time-display" class="status-val">30초</span>
+    </div>
+    <div class="status-item">
+      <span class="status-label">현재 점수</span>
+      <span id="score-display" class="status-val">0</span>
+    </div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+</div>
+
+<div id="start-overlay" class="overlay">
+  <h1>🪖 부캠 뚝배기 깨기</h1>
+  <p>제한시간 30초 동안 나타나는 적의 뚝배기를 깨부수세요!</p>
+  <div class="rule-box">
+    <div>🪖 <b>3뚝 적군</b> : +10점 (헤드샷 타격)</div>
+    <div>🍗 <b>황금 치킨</b> : +30점 (보너스 타겟)</div>
+    <div>🌱 <b>아군 신생아</b> : -20점 (팀킬 감점 주의)</div>
+  </div>
+  <button class="btn" id="start-btn">사격 개시 (START)</button>
+</div>
+
+<div id="end-overlay" class="overlay hidden">
+  <h1>작전 종료!</h1>
+  <p id="final-stats">집계 중...</p>
+  <div id="code-box" class="code-display">코드 생성 중...</div>
+  <button class="btn btn-copy" id="copy-btn">📋 보상 코드 복사하기</button>
+  <button class="btn" style="background:#57606F; color:#FFF; margin-top: 10px;" onclick="location.reload()">다시 하기</button>
+</div>
+
+<script>
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  function playSound(type) {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    const now = audioCtx.currentTime;
+
+    if (type === 'hit') {
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(140, now);
+      osc.frequency.exponentialRampToValueAtTime(30, now + 0.12);
+      gain.gain.setValueAtTime(1, now);
+      gain.gain.linearRampToValueAtTime(0.01, now + 0.12);
+      osc.start(now);
+      osc.stop(now + 0.12);
+    } else if (type === 'bonus') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, now);
+      osc.frequency.setValueAtTime(880, now + 0.08);
+      gain.gain.setValueAtTime(0.7, now);
+      gain.gain.linearRampToValueAtTime(0.01, now + 0.25);
+      osc.start(now);
+      osc.stop(now + 0.25);
+    } else if (type === 'penalty') {
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(90, now);
+      gain.gain.setValueAtTime(0.8, now);
+      gain.gain.linearRampToValueAtTime(0.01, now + 0.2);
+      osc.start(now);
+      osc.stop(now + 0.2);
+    }
+  }
+
+  const grid = document.getElementById('grid');
+  const holes = [];
+  for (let i = 0; i < 9; i++) {
+    const hole = document.createElement('div');
+    hole.className = 'hole';
+    hole.dataset.index = i;
+    grid.appendChild(hole);
+    holes.push(hole);
+  }
+
+  let score = 0;
+  let timeLeft = 30;
+  let gameTimer = null;
+  let spawnTimer = null;
+  let gameStartTime = 0;
+  let generatedCode = "";
+
+  const timeDisplay = document.getElementById('time-display');
+  const scoreDisplay = document.getElementById('score-display');
+  const startOverlay = document.getElementById('start-overlay');
+  const endOverlay = document.getElementById('end-overlay');
+  const finalStats = document.getElementById('final-stats');
+  const codeBox = document.getElementById('code-box');
+  const copyBtn = document.getElementById('copy-btn');
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const userId = urlParams.get('uid') || "12345678";
+
+  document.getElementById('start-btn').addEventListener('click', startGame);
+
+  function startGame() {
+    startOverlay.classList.add('hidden');
+    score = 0;
+    timeLeft = 30;
+    scoreDisplay.innerText = score;
+    timeDisplay.innerText = timeLeft + "초";
+    gameStartTime = Date.now();
+
+    gameTimer = setInterval(() => {
+      timeLeft--;
+      timeDisplay.innerText = timeLeft + "초";
+      if (timeLeft <= 0) endGame();
+    }, 1000);
+
+    scheduleNextSpawn();
+  }
+
+  function scheduleNextSpawn() {
+    if (timeLeft <= 0) return;
+    const interval = Math.max(350, 750 - (30 - timeLeft) * 12);
+    spawnTimer = setTimeout(() => {
+      spawnTarget();
+      scheduleNextSpawn();
+    }, interval);
+  }
+
+  function spawnTarget() {
+    const emptyHoles = holes.filter(h => !h.querySelector('.target'));
+    if (emptyHoles.length === 0) return;
+    const hole = emptyHoles[Math.floor(Math.random() * emptyHoles.length)];
+
+    const rand = Math.random();
+    let type = 'enemy';
+    let icon = '🪖';
+    let label = '적군';
+    let point = 10;
+
+    if (rand < 0.15) {
+      type = 'bonus';
+      icon = '🍗';
+      label = '치킨';
+      point = 30;
+    } else if (rand < 0.30) {
+      type = 'friendly';
+      icon = '🌱';
+      label = '아군';
+      point = -20;
+    }
+
+    const target = document.createElement('div');
+    target.className = `target target-${type}`;
+    target.innerHTML = `<span class="target-icon">${icon}</span><span class="target-text">${label}</span>`;
+
+    const onHit = (e) => {
+      e.preventDefault();
+      if (target.classList.contains('hit')) return;
+      target.classList.add('hit');
+
+      score = Math.max(0, score + point);
+      scoreDisplay.innerText = score;
+
+      if (type === 'enemy') playSound('hit');
+      else if (type === 'bonus') playSound('bonus');
+      else playSound('penalty');
+
+      setTimeout(() => { target.remove(); }, 120);
+    };
+
+    target.addEventListener('touchstart', onHit, { passive: false });
+    target.addEventListener('mousedown', onHit);
+
+    hole.appendChild(target);
+    requestAnimationFrame(() => target.classList.add('active'));
+
+    const hideTime = Math.max(500, 750 - (30 - timeLeft) * 7);
+    setTimeout(() => {
+      if (target.parentElement) {
+        target.classList.remove('active');
+        setTimeout(() => { target.remove(); }, 120);
+      }
+    }, hideTime);
+  }
+
+  async function endGame() {
+    clearInterval(gameTimer);
+    clearTimeout(spawnTimer);
+    holes.forEach(h => h.innerHTML = '');
+
+    finalStats.innerHTML = `최종 득점: <b>${score}점</b><br>수송기 보급 본부와 통신 중...`;
+    endOverlay.classList.remove('hidden');
+
+    try {
+      const response = await fetch('/api/get-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          uid: userId,
+          score: score,
+          startTime: gameStartTime
+        })
+      });
+
+      if (!response.ok) throw new Error('API 응답 실패');
+      const data = await response.json();
+      generatedCode = data.code;
+      codeBox.innerText = generatedCode;
+      finalStats.innerHTML = `최종 득점: <b>${score}점</b> (보상: 🪙 ${data.coins}코인)`;
+    } catch (err) {
+      const mockTimestamp = Math.floor(Date.now() / 1000);
+      generatedCode = `OOPS-10-${mockTimestamp}-TESTCODE`;
+      codeBox.innerText = generatedCode;
+      finalStats.innerHTML = `최종 득점: <b>${score}점</b> (로컬 테스트 모드)`;
+    }
+  }
+
+  copyBtn.addEventListener('click', () => {
+    if (!generatedCode) return;
+    const commandText = `!보상 ${generatedCode}`;
+    navigator.clipboard.writeText(commandText).then(() => {
+      copyBtn.innerText = "✅ 복사 완료! 디코에 붙여넣기 하세요";
+      setTimeout(() => { copyBtn.innerText = "📋 보상 코드 복사하기"; }, 2500);
+    }).catch(() => {
+      prompt("아래 명령어를 복사하여 디스코드에 입력하세요:", commandText);
+    });
+  });
+</script>
+</body>
+</html>
