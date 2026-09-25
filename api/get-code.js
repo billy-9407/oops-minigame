@@ -1,9 +1,9 @@
 const crypto = require('crypto');
 
-// app-1.py의 GAME_SECRET_KEY와 일치해야 합니다.
+// 봇의 GAME_SECRET_KEY와 일치해야 합니다.
 const GAME_SECRET_KEY = process.env.GAME_SECRET_KEY || "OOPS_COMMUNITY_SUPER_SECRET_KEY_2026";
 
-export default function handler(req, res) {
+module.exports = function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ message: '허용되지 않은 메서드입니다.' });
   }
@@ -38,9 +38,18 @@ export default function handler(req, res) {
     coins = 0;          // 199점 이하: 0코인
   }
 
+  // 200점 미만은 보상 코드를 발급하지 않고 재도전 유도
+  if (coins <= 0) {
+    return res.status(200).json({
+      success: false,
+      coins: 0,
+      message: '보상 기준 점수(200점)에 도달하지 못했습니다.'
+    });
+  }
+
   const timestamp = Math.floor(nowMs / 1000);
 
-  // HMAC-SHA256 암호화 서명 생성
+  // HMAC-SHA256 암호화 서명 생성 (uid + coins + timestamp)
   const payload = `${uid}:${coins}:${timestamp}`;
   const signature = crypto
     .createHmac('sha256', GAME_SECRET_KEY)
@@ -56,4 +65,4 @@ export default function handler(req, res) {
     code: rewardCode,
     coins: coins
   });
-}
+};
