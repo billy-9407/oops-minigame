@@ -197,7 +197,7 @@
       color: #2ECC71;
       border: 1px dashed #2ECC71;
       font-family: monospace;
-      font-size: 15px;
+      font-size: 12px;
       font-weight: bold;
       padding: 12px;
       border-radius: 8px;
@@ -290,22 +290,27 @@
 
   // 한국 시간(KST) 기준 YYYY-MM-DD 문자열 생성
   function getKstDateString() {
-    const now = new Date();
-    const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-    const kst = new Date(utc + (9 * 3600000));
-    const y = kst.getFullYear();
-    const m = String(kst.getMonth() + 1).padStart(2, '0');
-    const d = String(kst.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
+    return new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
   }
 
   const urlParams = new URLSearchParams(window.location.search);
-  const userId = urlParams.get('uid') || "GUEST";
-  const todayKst = getKstDateString();
-  const rewardStorageKey = `oops_reward_claimed_${userId}`;
+  const userId = urlParams.get('uid') || '';
+  const linkExpiry = urlParams.get('exp') || '';
+  const linkSignature = urlParams.get('sig') || '';
+  const hasGameLink = /^\d{17,20}$/.test(userId) && /^\d{10}$/.test(linkExpiry) &&
+    /^[A-Fa-f0-9]{64}$/.test(linkSignature);
+  const rewardStorageKey = `oops_reward_code_${userId}`;
 
-  function hasClaimedToday() {
-    return localStorage.getItem(rewardStorageKey) === todayKst;
+  function savedReward() {
+    try {
+      const reward = JSON.parse(localStorage.getItem(rewardStorageKey));
+      return reward && reward.day === getKstDateString() ? reward : null;
+    } catch (_) { return null; }
+  }
+
+  function saveReward(code, coins) {
+    try { localStorage.setItem(rewardStorageKey, JSON.stringify({ day: getKstDateString(), code, coins })); }
+    catch (_) { /* 개인 정보 보호 모드에서도 발급된 코드는 화면에서 복사할 수 있습니다. */ }
   }
 
   const grid = document.getElementById('grid');
@@ -336,10 +341,12 @@
   const retryBtn = document.getElementById('retry-btn');
 
   // 시작 화면 안내 문구 세팅
-  if (hasClaimedToday()) {
-    startBadge.innerText = "ℹ️ 오늘 일일 보상을 이미 수령하여 연습 모드로 진행됩니다.";
+  if (savedReward()) {
+    startBadge.innerText = "ℹ️ 오늘 발급된 코드를 다시 확인할 수 있습니다. 코인 지급은 하루 1회입니다.";
+  } else if (!hasGameLink) {
+    startBadge.innerText = "ℹ️ 보상에는 디스코드 !미니게임 DM 링크가 필요합니다.";
   } else {
-    startBadge.innerText = "🪙 200점 이상 달성 시 오늘의 1회 코인 보상 코드 지급!";
+    startBadge.innerText = "🪙 200점 이상 달성 시 보상 코드를 발급합니다. 지급은 하루 1회!";
   }
 
   document.getElementById('start-btn').addEventListener('click', startGame);
@@ -349,6 +356,12 @@
   });
 
   function startGame() {
+    clearInterval(gameTimer);
+    clearTimeout(spawnTimer);
+    holes.forEach(h => h.replaceChildren());
+    generatedCode = '';
+    copyBtn.style.display = 'none';
+    retryBtn.disabled = false;
     startOverlay.classList.add('hidden');
     score = 0;
     timeLeft = 30;
@@ -403,7 +416,7 @@
 
     const onHit = (e) => {
       e.preventDefault();
-      if (target.classList.contains('hit')) return;
+      if (timeLeft <= 0 || target.classList.contains('hit')) return;
       target.classList.add('hit');
 
       score = Math.max(0, score + point);
@@ -434,31 +447,32 @@
   async function endGame() {
     clearInterval(gameTimer);
     clearTimeout(spawnTimer);
-    holes.forEach(h => h.innerHTML = '');
-
+    holes.forEach(h => h.replaceChildren());
     endOverlay.classList.remove('hidden');
+    retryBtn.disabled = true;
 
-    // 1. 이미 오늘 보상 코드를 발급받은 경우 (연습 모드)
-    if (hasClaimedToday()) {
-      finalStats.innerHTML = `최종 득점: <b>${score}점</b><br>🎮 [연습 모드 완료]`;
-      codeBox.style.color = "#A4B0BE";
-      codeBox.style.borderColor = "#2F3640";
-      codeBox.innerHTML = `오늘 보상 수령 완료<br><span style="font-size:12px;color:#747D8C;">내일 자정(00시) 이후 다시 보상 코드를 획득할 수 있습니다.</span>`;
-      copyBtn.style.display = "none";
+    // 발급된 코드는 새로고침 후에도 다시 복사할 수 있습니다.
+    const previousReward = savedReward();
+    if (previousReward) {
+      generatedCode = previousReward.code;
+      finalStats.innerHTML = `최종 득점: <b>${score}점</b><br>오늘 발급된 코드 (코인 지급은 하루 1회)`;
+      codeBox.innerText = generatedCode;
+      copyBtn.style.display = 'block';
+      retryBtn.disabled = false;
       return;
     }
 
-    // 2. 게스트(uid 없음) 체크
-    if (userId === "GUEST") {
+    if (!hasGameLink) {
       finalStats.innerHTML = `최종 득점: <b>${score}점</b>`;
       codeBox.style.color = "#E74C3C";
       codeBox.style.borderColor = "#E74C3C";
       codeBox.innerHTML = `디스코드 전용 링크 필요<br><span style="font-size:12px;color:#CED6E0;">디스코드 채널에서 !미니게임 명령어를 입력해 주세요.</span>`;
       copyBtn.style.display = "none";
+      retryBtn.disabled = false;
       return;
     }
 
-    // 3. 오늘 첫 판: 서버와 통신하여 보상 코드 발급
+    // 오늘 첫 보상 코드 발급
     finalStats.innerHTML = `최종 득점: <b>${score}점</b><br>수송기 보급 본부와 통신 중...`;
     codeBox.style.color = "#2ECC71";
     codeBox.style.borderColor = "#2ECC71";
@@ -470,6 +484,8 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           uid: userId,
+          exp: linkExpiry,
+          sig: linkSignature,
           score: score,
           startTime: gameStartTime
         })
@@ -477,26 +493,26 @@
 
       const data = await response.json();
 
-      if (data.success && data.coins > 0) {
-        // 성공적으로 보상 코드 획득 -> 오늘 날짜 기록 (이후 연속 플레이는 연습 모드로 전환)
-        localStorage.setItem(rewardStorageKey, todayKst);
+      if (response.ok && data.success && data.coins > 0) {
+        saveReward(data.code, data.coins);
         generatedCode = data.code;
         codeBox.innerText = generatedCode;
         finalStats.innerHTML = `최종 득점: <b>${score}점</b> (보상: 🪙 <b>+${data.coins}코인</b>)`;
         copyBtn.style.display = "block";
       } else {
-        // 점수 미달(200점 미만) -> 당일 기록 안 함 (재도전 가능)
         generatedCode = "";
         codeBox.style.color = "#FFA502";
         codeBox.style.borderColor = "#FFA502";
-        codeBox.innerHTML = `보상 기준 미달 (200점 필요)<br><span style="font-size:12px;color:#CED6E0;">코인이 지급되지 않았습니다. 다시 도전해 보세요!</span>`;
-        finalStats.innerHTML = `최종 득점: <b>${score}점</b> (최소 200점 필요)`;
+        codeBox.innerText = data.message || '보상 기준 미달 (200점 필요). 다시 도전해 보세요!';
+        finalStats.innerHTML = `최종 득점: <b>${score}점</b>`;
         copyBtn.style.display = "none";
       }
     } catch (err) {
       finalStats.innerHTML = `최종 득점: <b>${score}점</b> (통신 오류)`;
       codeBox.innerText = "서버 연결에 실패했습니다. 다시 시도해 주세요.";
       copyBtn.style.display = "none";
+    } finally {
+      retryBtn.disabled = false;
     }
   }
 
