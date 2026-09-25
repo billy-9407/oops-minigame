@@ -1,68 +1,54 @@
 const crypto = require('crypto');
 
-// 봇의 GAME_SECRET_KEY와 일치해야 합니다.
-const GAME_SECRET_KEY = process.env.GAME_SECRET_KEY || "OOPS_COMMUNITY_SUPER_SECRET_KEY_2026";
+// Vercel 환경 변수와 봇 서버의 GAME_SECRET_KEY가 반드시 같아야 합니다.
+const LINK_SECONDS = 2 * 60 * 60;
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+
+function kstDay(nowMs) {
+  return new Date(nowMs + KST_OFFSET_MS).toISOString().slice(0, 10).replace(/-/g, '');
+}
+
+function sign(secret, payload) {
+  return crypto.createHmac('sha256', secret).update(payload, 'ascii').digest('hex').toUpperCase();
+}
+
+function validSignature(actual, expected) {
+  if (typeof actual !== 'string' || !/^[A-Fa-f0-9]{64}$/.test(actual)) return false;
+  return crypto.timingSafeEqual(Buffer.from(actual.toUpperCase(), 'hex'), Buffer.from(expected, 'hex'));
+}
 
 module.exports = function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ message: '허용되지 않은 메서드입니다.' });
+  res.setHeader('Cache-Control', 'no-store');
+  if (req.method !== 'POST') return res.status(405).json({ success: false, message: 'POST 요청만 허용됩니다.' });
+
+  const secret = process.env.GAME_SECRET_KEY;
+  if (!secret || secret.length < 32) {
+    return res.status(503).json({ success: false, message: '게임 보상 서버 설정이 완료되지 않았습니다.' });
   }
 
-  const { uid, score, startTime } = req.body;
-
-  if (!uid || score === undefined || !startTime) {
-    return res.status(400).json({ message: '필수 데이터가 누락되었습니다.' });
-  }
-
+  const { uid, exp, sig, score, startTime } = req.body || {};
   const nowMs = Date.now();
-  const playDurationSec = (nowMs - startTime) / 1000;
-
-  // 치트 방지: 최소 25초 이상 플레이하지 않고 들어온 요청 거절
-  if (playDurationSec < 25) {
-    return res.status(400).json({ message: '비정상적인 플레이 시간이 감지되었습니다.' });
+  const nowSec = Math.floor(nowMs / 1000);
+  const userId = String(uid || '');
+  const expiry = Number(exp);
+  if (!/^\d{17,20}$/.test(userId) || !Number.isSafeInteger(expiry) ||
+      expiry < nowSec || expiry > nowSec + LINK_SECONDS ||
+      !validSignature(sig, sign(secret, `link:${userId}:${expiry}`))) {
+    return res.status(403).json({ success: false, message: '유효한 디스코드 DM 링크로 다시 접속해 주세요.' });
+  }
+  if (!Number.isSafeInteger(score) || score < 0 || score > 3000 ||
+      !Number.isSafeInteger(startTime) ||
+      nowMs - startTime < 25_000 || nowMs - startTime > 90_000) {
+    return res.status(400).json({ success: false, message: '게임 점수 또는 플레이 시간을 확인할 수 없습니다.' });
   }
 
-  // 점수별 차등 보상 구간 설정
-  let coins = 0;
-  if (score >= 600) {
-    coins = 5;          // 600점 이상: 5코인
-  } else if (score >= 550) {
-    coins = 4;          // 550-599점: 4코인
-  } else if (score >= 400) {
-    coins = 3;          // 400-549점: 3코인
-  } else if (score >= 300) {
-    coins = 2;          // 300-399점: 2코인
-  } else if (score >= 200) {
-    coins = 1;          // 200-299점: 1코인
-  } else {
-    coins = 0;          // 199점 이하: 0코인
-  }
+  const coins = score >= 600 ? 5 : score >= 550 ? 4 : score >= 400 ? 3 :
+    score >= 300 ? 2 : score >= 200 ? 1 : 0;
+  if (!coins) return res.status(200).json({ success: false, coins: 0, message: '보상 기준 점수(200점)에 도달하지 못했습니다.' });
 
-  // 200점 미만은 보상 코드를 발급하지 않고 재도전 유도
-  if (coins <= 0) {
-    return res.status(200).json({
-      success: false,
-      coins: 0,
-      message: '보상 기준 점수(200점)에 도달하지 못했습니다.'
-    });
-  }
-
-  const timestamp = Math.floor(nowMs / 1000);
-
-  // HMAC-SHA256 암호화 서명 생성 (uid + coins + timestamp)
-  const payload = `${uid}:${coins}:${timestamp}`;
-  const signature = crypto
-    .createHmac('sha256', GAME_SECRET_KEY)
-    .update(payload)
-    .digest('hex')
-    .substring(0, 8)
-    .toUpperCase();
-
-  const rewardCode = `OOPS-${coins}-${timestamp}-${signature}`;
-
-  return res.status(200).json({
-    success: true,
-    code: rewardCode,
-    coins: coins
-  });
+  const day = kstDay(nowMs);
+  const issued = nowSec;
+  const signature = sign(secret, `reward:${userId}:${coins}:${day}:${issued}`);
+  const code = `OOPS2-${userId}-${coins}-${day}-${issued}-${signature}`;
+  return res.status(200).json({ success: true, code, coins });
 };
