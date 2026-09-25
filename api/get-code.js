@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 
-// app-1.py의 GAME_SECRET_KEY와 정확히 일치해야 합니다.
+// app-1.py의 GAME_SECRET_KEY와 일치해야 합니다.
 const GAME_SECRET_KEY = process.env.GAME_SECRET_KEY || "OOPS_COMMUNITY_SUPER_SECRET_KEY_2026";
 
 export default function handler(req, res) {
@@ -17,13 +17,27 @@ export default function handler(req, res) {
   const nowMs = Date.now();
   const playDurationSec = (nowMs - startTime) / 1000;
 
-  // 치트 방지: 최소 25초 이상 플레이하지 않고 들어온 요청은 거절
+  // 치트 방지: 최소 25초 이상 플레이하지 않고 들어온 요청 거절
   if (playDurationSec < 25) {
     return res.status(400).json({ message: '비정상적인 플레이 시간이 감지되었습니다.' });
   }
 
-  // 점수별 차등 보상 (150점 이상 10코인, 150점 미만 5코인)
-  const coins = score >= 150 ? 10 : 5;
+  // 점수별 차등 보상 구간 설정
+  let coins = 0;
+  if (score >= 600) {
+    coins = 5;          // 600점 이상: 5코인
+  } else if (score >= 550) {
+    coins = 4;          // 550-599점: 4코인
+  } else if (score >= 400) {
+    coins = 3;          // 400-549점: 3코인
+  } else if (score >= 300) {
+    coins = 2;          // 300-399점: 2코인
+  } else if (score >= 200) {
+    coins = 1;          // 200-299점: 1코인
+  } else {
+    coins = 0;          // 199점 이하: 0코인
+  }
+
   const timestamp = Math.floor(nowMs / 1000);
 
   // HMAC-SHA256 암호화 서명 생성
