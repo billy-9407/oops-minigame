@@ -1,0 +1,10 @@
+node_modules/
+.env
+.env.*
+!.env.example
+.vercel/
+bot/app.py
+*.db
+*.db-wal
+*.db-shm
+.test-output/
