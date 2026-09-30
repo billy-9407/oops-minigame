@@ -1,0 +1,2 @@
+import {endpoint,validateResult,saveRanking} from '../lib/server.mjs';
+export default endpoint('POST',async body=>{const {session,result,code,day}=validateResult(body);let rankingSaved=false;try{await saveRanking(session,result);rankingSaved=Boolean(session.uid&&!session.test&&process.env.UPSTASH_REDIS_REST_URL&&process.env.UPSTASH_REDIS_REST_TOKEN);}catch{/* A ranking outage must never lose a valid reward. */}return {...result,code,day,rankingSaved,authenticated:Boolean(session.uid),test:Boolean(session.test)};});
